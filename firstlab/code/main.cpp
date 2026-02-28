@@ -2,17 +2,20 @@
 #include "opencv2/core/base.hpp"
 #include "opencv2/core/types.hpp"
 #include "opencv2/highgui.hpp"
+#include "opencv2/imgproc.hpp"
 #include <array>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <opencv2/opencv.hpp>
 #include <random>
+#include <string>
 #include <unordered_set>
 #include <vector>
 #define MAX_LINE 1024
 #define FEATURE_COUNT 4
 #define CLUSTER_COUNT 3
+#define GRAPH_SIZE 3000
 
 struct point {
   std::array<float, FEATURE_COUNT> coord = {};
@@ -172,31 +175,29 @@ void write_centres_to_file(std::array<cluster, CLUSTER_COUNT> &a) {
   fclose(fp);
 }
 
-cv::Mat get_graph_base(int img_width, int img_height) {
-  cv::Mat image(img_height, img_width, CV_8UC3, cv::Scalar(224, 224, 224));
+cv::Mat get_graph_base(int size, int division_len) {
+  cv::Mat image(size, size, CV_8UC3, cv::Scalar(224, 224, 224));
 
-  if (image.empty()) {
-    std::cerr << "Could not create image." << std::endl;
-    return {};
+  float bias = (float)size / 2 - (size / division_len) / 2 * division_len;
+
+  cv::line(image, cv::Point(size / 2, 0), cv::Point(size / 2, size),
+           cv::Scalar(0, 0, 0), 1);
+  for (int i = 0; i < ceil((float)size / division_len); i++) {
+    cv::line(image, cv::Point(size / 2 - 5, division_len * i + bias),
+             cv::Point(size / 2 + 5, division_len * i + bias),
+             cv::Scalar(0, 0, 0), 1);
   }
 
-  cv::line(image, cv::Point(img_width / 2, 0),
-           cv::Point(img_width / 2, img_height), cv::Scalar(0, 0, 0), 1);
-  for (int i = 1; i < img_height / 10; i++) {
-    cv::line(image, cv::Point(img_width / 2 - 5, 10 * i),
-             cv::Point(img_width / 2 + 5, 10 * i), cv::Scalar(0, 0, 0), 1);
+  cv::line(image, cv::Point(0, size / 2), cv::Point(size, size / 2),
+           cv::Scalar(0, 0, 0), 1);
+  for (int i = 0; i < size / division_len; i++) {
+    cv::line(image, cv::Point(division_len * i + bias, size / 2 + 5),
+             cv::Point(division_len * i + bias, size / 2 - 5),
+             cv::Scalar(0, 0, 0), 1);
   }
 
-  cv::line(image, cv::Point(0, img_height / 2),
-           cv::Point(img_width, img_height / 2), cv::Scalar(0, 0, 0), 1);
-  for (int i = 1; i < img_height / 10; i++) {
-    cv::line(image, cv::Point(10 * i, img_height / 2 + 5),
-             cv::Point(10 * i, img_height / 2 - 5), cv::Scalar(0, 0, 0), 1);
-  }
-
-  cv::rectangle(image, cv::Point(0, 0),
-                cv::Point(img_width - 1, img_height - 1), cv::Scalar(0, 0, 0),
-                1);
+  cv::rectangle(image, cv::Point(0, 0), cv::Point(size - 1, size - 1),
+                cv::Scalar(0, 0, 0), 1);
 
   return image;
 }
@@ -228,22 +229,29 @@ float max_coord(std::array<cluster, CLUSTER_COUNT> clusters) {
   return result;
 }
 
-cv::Mat create_graph(int x, int y, std::array<cluster, CLUSTER_COUNT> clusters,
-                     int scale, int dot_scale, int size) {
+cv::Mat create_graph(int x, int y,
+                     std::array<cluster, CLUSTER_COUNT> clusters) {
   if (x == y || x > FEATURE_COUNT - 1 || y > FEATURE_COUNT - 1) {
     return {};
   }
 
-  cv::Mat image = get_graph_base(size * 10 * scale, size * 10 * scale);
+  int size = 1000;
+  int real_size = max_coord(clusters) + 2;
+  int dot_scale = 2;
+
+  cv::Mat image = get_graph_base(size, ceil((float)size / real_size / 2));
 
   for (int i = 0; i < clusters.size(); i++) {
     for (point j : clusters[i].points) {
-      cv::rectangle(image,
-                    cv::Point(j.coord[x] * 10 * scale - dot_scale,
-                              j.coord[y] * 10 * scale + dot_scale),
-                    cv::Point(j.coord[x] * 10 * scale + dot_scale,
-                              j.coord[y] * 10 * scale - dot_scale),
-                    random_color(i), -1);
+      cv::rectangle(
+          image,
+          cv::Point(
+              size / 2. + (j.coord[x] / real_size) * (size / 2.) - dot_scale,
+              size / 2. - (j.coord[y] / real_size) * (size / 2.) + dot_scale),
+          cv::Point(
+              size / 2. + (j.coord[x] / real_size) * (size / 2.) + dot_scale,
+              size / 2. - (j.coord[y] / real_size) * (size / 2.) - dot_scale),
+          random_color(i), -1);
     }
   }
 
@@ -252,26 +260,26 @@ cv::Mat create_graph(int x, int y, std::array<cluster, CLUSTER_COUNT> clusters,
 
 cv::Mat make_border(cv::Mat image) {
   cv::Mat with_border;
-  float scale = 0.05;
-  cv::copyMakeBorder(image, with_border, image.rows * scale, image.rows * scale,
-                     image.cols * scale, image.cols * scale,
+  float border = 20;
+  cv::copyMakeBorder(image, with_border, border, border, border, border,
                      cv::BORDER_CONSTANT, cv::Scalar(255, 255, 255));
   return with_border;
 }
 
-void print_all(std::array<cluster, CLUSTER_COUNT> clusters, int scale,
-               int dot_scale) {
-  int size = ceil(max_coord(clusters));
-  cv::Mat blank(size * 10 * scale, size * 10 * scale, CV_8UC3,
-                cv::Scalar(255, 255, 255));
+void print_all(std::array<cluster, CLUSTER_COUNT> clusters) {
+  cv::Mat blank(GRAPH_SIZE, GRAPH_SIZE, CV_8UC3, cv::Scalar(255, 255, 255));
   blank = make_border(blank);
   int graphs_count = FEATURE_COUNT * (FEATURE_COUNT - 1) / 2;
   int side_size = ceil(sqrt(graphs_count));
   std::vector<cv::Mat> images;
   for (int i = 0; i < FEATURE_COUNT; i++) {
     for (int j = i + 1; j < FEATURE_COUNT; j++) {
-      cv::Mat temp = create_graph(i, j, clusters, scale, dot_scale, size);
-      images.push_back(make_border(temp));
+      cv::Mat temp = create_graph(i, j, clusters);
+      temp = make_border(temp);
+      cv::putText(temp, std::to_string(i) + ":" + std::to_string(j),
+                  cv::Point(20 + 2, 20 - 2), cv::FONT_HERSHEY_COMPLEX, 0.5,
+                  cv::Scalar(0, 0, 0), 1);
+      images.push_back(temp);
     }
   }
   cv::Mat image;
@@ -302,6 +310,6 @@ int main() {
   std::array<cluster, CLUSTER_COUNT> clusters = clustering(data, 0.1);
   print_cluster(clusters);
   write_centres_to_file(clusters);
-  print_all(clusters, 10, 2);
+  print_all(clusters);
   return 0;
 }
