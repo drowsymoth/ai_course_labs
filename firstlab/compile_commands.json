@@ -1,0 +1,11 @@
+[
+  {
+    "file": "code/main.cpp",
+    "arguments": [
+      "g++",
+      "code/main.cpp",
+      "-I/usr/include/opencv4"
+    ],
+    "directory": "/home/sleepymoth/projects/calcmathlab/firstlab"
+  }
+]
