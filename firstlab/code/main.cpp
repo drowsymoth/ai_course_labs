@@ -1,8 +1,3 @@
-#include "opencv2/core.hpp"
-#include "opencv2/core/base.hpp"
-#include "opencv2/core/types.hpp"
-#include "opencv2/highgui.hpp"
-#include "opencv2/imgproc.hpp"
 #include <array>
 #include <cmath>
 #include <cstdio>
@@ -126,7 +121,13 @@ void print_point(const point &a) {
   printf("\n");
 }
 
-void print_cluster(const std::array<cluster, CLUSTER_COUNT> a) {
+void print_all_points(const std::vector<point> &data) {
+  for (point i : data) {
+    print_point(i);
+  }
+}
+
+void print_clusters(const std::array<cluster, CLUSTER_COUNT> a) {
   for (int i = 0; i < CLUSTER_COUNT; i++) {
     printf("%d cluster countains points:\n", i);
     for (int j = 0; j < a[i].points.size(); j++) {
@@ -159,8 +160,8 @@ std::vector<point> read_csv_to_points(char *path) {
   return points;
 }
 
-void write_centres_to_file(std::array<cluster, CLUSTER_COUNT> &a) {
-  FILE *fp = fopen("results.csv", "w");
+void write_centres_to_file(std::array<cluster, CLUSTER_COUNT> &a, char *path) {
+  FILE *fp = fopen(path, "w");
   char line[MAX_LINE] = "";
   for (int i = 0; i < a.size(); i++) {
     for (int j = 0; j < FEATURE_COUNT; j++) {
@@ -266,7 +267,7 @@ cv::Mat make_border(cv::Mat image) {
   return with_border;
 }
 
-void print_all(std::array<cluster, CLUSTER_COUNT> clusters) {
+void display_clusters(std::array<cluster, CLUSTER_COUNT> clusters) {
   cv::Mat blank(GRAPH_SIZE, GRAPH_SIZE, CV_8UC3, cv::Scalar(255, 255, 255));
   blank = make_border(blank);
   int graphs_count = FEATURE_COUNT * (FEATURE_COUNT - 1) / 2;
@@ -300,16 +301,134 @@ void print_all(std::array<cluster, CLUSTER_COUNT> clusters) {
     horizontals.push_back(temp_mat);
   }
   cv::vconcat(horizontals, image);
+
   cv::imshow("Aboba", image);
   cv::waitKey();
-  cv::imwrite("opencv_graphic.png", image);
+}
+
+void display_clusters(std::array<cluster, CLUSTER_COUNT> clusters, char *name) {
+  cv::Mat blank(GRAPH_SIZE, GRAPH_SIZE, CV_8UC3, cv::Scalar(255, 255, 255));
+  blank = make_border(blank);
+  int graphs_count = FEATURE_COUNT * (FEATURE_COUNT - 1) / 2;
+  int side_size = ceil(sqrt(graphs_count));
+  std::vector<cv::Mat> images;
+  for (int i = 0; i < FEATURE_COUNT; i++) {
+    for (int j = i + 1; j < FEATURE_COUNT; j++) {
+      cv::Mat temp = create_graph(i, j, clusters);
+      temp = make_border(temp);
+      cv::putText(temp, std::to_string(i) + ":" + std::to_string(j),
+                  cv::Point(20 + 2, 20 - 2), cv::FONT_HERSHEY_COMPLEX, 0.5,
+                  cv::Scalar(0, 0, 0), 1);
+      images.push_back(temp);
+    }
+  }
+  cv::Mat image;
+
+  std::vector<cv::Mat> horizontals;
+  for (int i = 0; i < ceil((float)graphs_count / side_size); i++) {
+    std::vector<cv::Mat> temp;
+    for (int j = 0; j < side_size; j++) {
+      int temp_coord = i * side_size + j;
+      if (temp_coord < graphs_count) {
+        temp.push_back(images[temp_coord]);
+      } else {
+        temp.push_back(blank.clone());
+      }
+    }
+    cv::Mat temp_mat;
+    cv::hconcat(temp, temp_mat);
+    horizontals.push_back(temp_mat);
+  }
+  cv::vconcat(horizontals, image);
+  cv::imwrite(name, image);
+}
+
+void menu(std::vector<point> &data) {
+  std::array<cluster, CLUSTER_COUNT> clusters;
+  char path[64];
+  while (true) {
+    system("clear");
+    printf("============\n=   Menu   =\n============\n\n0) Exit\n1) Print "
+           "current points\n2) Read points from text file\n3) Cluster current "
+           "points\n4) Pirnt current cluster partitioning\n5) Write centres "
+           "of clusters to a file\n6) Save an image of clusters\n7) Display a "
+           "window with clusters (doesn't work properly)\n\nAction -> ");
+    int choice = 0;
+    scanf("%d", &choice);
+    getchar();
+    if (0 > choice && 7 < choice) {
+      printf("Wrong input! Try again.");
+      getchar();
+      continue;
+    }
+    switch (choice) {
+    case 0:
+      return;
+      break;
+    case 1:
+      print_all_points(data);
+      getchar();
+      break;
+    case 2:
+      printf("Give a path to your file -> ");
+      fgets(path, sizeof(path), stdin);
+      if (strchr(path, '\n')) {
+        *strchr(path, '\n') = 0;
+      }
+      while (strlen(path) > 50) {
+        printf("The name is too long! Try again.");
+        fgets(path, sizeof(path), stdin);
+        if (strchr(path, '\n')) {
+          *strchr(path, '\n') = 0;
+        }
+      }
+      data = read_csv_to_points(path);
+      break;
+    case 3:
+      clusters = clustering(data, 10E-3);
+      break;
+    case 4:
+      print_clusters(clusters);
+      getchar();
+      break;
+    case 5:
+      printf("Give a name to your file -> ");
+      fgets(path, sizeof(path), stdin);
+      if (strchr(path, '\n')) {
+        *strchr(path, '\n') = 0;
+      }
+      while (strlen(path) > 50) {
+        printf("The name is too long! Try again.");
+        fgets(path, sizeof(path), stdin);
+        if (strchr(path, '\n')) {
+          *strchr(path, '\n') = 0;
+        }
+      }
+      write_centres_to_file(clusters, path);
+      break;
+    case 6:
+      printf("Give a name to your file -> ");
+      fgets(path, sizeof(path), stdin);
+      if (strchr(path, '\n')) {
+        *strchr(path, '\n') = 0;
+      }
+      while (strlen(path) > 50) {
+        printf("The name is too long! Try again.");
+        fgets(path, sizeof(path), stdin);
+        if (strchr(path, '\n')) {
+          *strchr(path, '\n') = 0;
+        }
+      }
+      display_clusters(clusters, path);
+      break;
+    case 7:
+      display_clusters(clusters);
+    }
+  }
 }
 
 int main() {
-  std::vector<point> data = read_csv_to_points("data/Iris_copy.csv");
-  std::array<cluster, CLUSTER_COUNT> clusters = clustering(data, 0.1);
-  print_cluster(clusters);
-  write_centres_to_file(clusters);
-  print_all(clusters);
+  std::vector<point> data;
+  menu(data);
   return 0;
 }
