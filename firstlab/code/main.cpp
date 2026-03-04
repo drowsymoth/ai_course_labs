@@ -8,8 +8,8 @@
 #include <unordered_set>
 #include <vector>
 #define MAX_LINE 1024
-#define FEATURE_COUNT 4
-#define CLUSTER_COUNT 3
+#define FEATURE_COUNT 2
+#define CLUSTER_COUNT 2
 #define GRAPH_SIZE 3000
 
 struct point {
@@ -114,9 +114,35 @@ std::array<cluster, CLUSTER_COUNT> clustering(std::vector<point> &data,
   return current;
 }
 
+std::vector<point> write_points() {
+  std::vector<point> data;
+  std::cout << "How many points are you gonna write? -> ";
+  int n = 0;
+  std::cin >> n;
+  while (n <= 0) {
+    std::cout << "Wrong input! Try again";
+    std::cin >> n;
+  }
+  std::cout << "Write your points with spaces between each coordinate. Each "
+               "point must contain "
+            << FEATURE_COUNT << " coordinates!\n";
+  for (int i = 0; i < n; i++) {
+    std::cout << "-->  ";
+    point temp;
+    for (int j = 0; j < FEATURE_COUNT; j++) {
+      if (!(std::cin >> temp.coord[j])) {
+        std::cout << "Wrong input, try again!";
+        j--;
+      }
+    }
+    data.push_back(temp);
+  }
+  return data;
+}
+
 void print_point(const point &a) {
   for (int i = 0; i < FEATURE_COUNT; i++) {
-    printf("\t%f", a.coord[i]);
+    printf("\t%.2f", a.coord[i]);
   }
   printf("\n");
 }
@@ -205,8 +231,8 @@ cv::Mat get_graph_base(int size, int division_len) {
 
 cv::Scalar random_color(int idx) {
   static const std::vector<cv::Scalar> baseColors = {
-      {255, 0, 0},   {0, 255, 0},   {0, 0, 255},
-      {255, 255, 0}, {255, 0, 255}, {0, 255, 255}};
+      {200, 30, 30},  {30, 200, 30},  {30, 30, 200},
+      {200, 150, 30}, {200, 30, 200}, {30, 200, 200}};
   if (idx < baseColors.size())
     return baseColors[idx];
 
@@ -349,15 +375,17 @@ void menu(std::vector<point> &data) {
   while (true) {
     system("clear");
     printf("============\n=   Menu   =\n============\n\n0) Exit\n1) Print "
-           "current points\n2) Read points from text file\n3) Cluster current "
-           "points\n4) Pirnt current cluster partitioning\n5) Write centres "
-           "of clusters to a file\n6) Save an image of clusters\n7) Display a "
+           "current points\n2) Write points by "
+           "hand\n3) Read points from text file\n4) Cluster current "
+           "points\n5) Pirnt current cluster partitioning\n6) Write centres "
+           "of clusters to a file\n7) Save an image of clusters\n8) Display a "
            "window with clusters (doesn't work properly)\n\nAction -> ");
     int choice = 0;
     scanf("%d", &choice);
     getchar();
-    if (0 > choice && 7 < choice) {
+    while (0 > choice && 7 < choice) {
       printf("Wrong input! Try again.");
+      scanf("%d", &choice);
       getchar();
       continue;
     }
@@ -370,6 +398,9 @@ void menu(std::vector<point> &data) {
       getchar();
       break;
     case 2:
+      data = write_points();
+      break;
+    case 3:
       printf("Give a path to your file -> ");
       fgets(path, sizeof(path), stdin);
       if (strchr(path, '\n')) {
@@ -384,27 +415,12 @@ void menu(std::vector<point> &data) {
       }
       data = read_csv_to_points(path);
       break;
-    case 3:
+    case 4:
       clusters = clustering(data, 10E-3);
       break;
-    case 4:
+    case 5:
       print_clusters(clusters);
       getchar();
-      break;
-    case 5:
-      printf("Give a name to your file -> ");
-      fgets(path, sizeof(path), stdin);
-      if (strchr(path, '\n')) {
-        *strchr(path, '\n') = 0;
-      }
-      while (strlen(path) > 50) {
-        printf("The name is too long! Try again.");
-        fgets(path, sizeof(path), stdin);
-        if (strchr(path, '\n')) {
-          *strchr(path, '\n') = 0;
-        }
-      }
-      write_centres_to_file(clusters, path);
       break;
     case 6:
       printf("Give a name to your file -> ");
@@ -419,9 +435,24 @@ void menu(std::vector<point> &data) {
           *strchr(path, '\n') = 0;
         }
       }
-      display_clusters(clusters, path);
+      write_centres_to_file(clusters, path);
       break;
     case 7:
+      printf("Give a name to your file -> ");
+      fgets(path, sizeof(path), stdin);
+      if (strchr(path, '\n')) {
+        *strchr(path, '\n') = 0;
+      }
+      while (strlen(path) > 50) {
+        printf("The name is too long! Try again.");
+        fgets(path, sizeof(path), stdin);
+        if (strchr(path, '\n')) {
+          *strchr(path, '\n') = 0;
+        }
+      }
+      display_clusters(clusters, path);
+      break;
+    case 8:
       display_clusters(clusters);
     }
   }
